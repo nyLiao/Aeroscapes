@@ -7,5 +7,5 @@ Set the data path to args.data in train.py.
 
 ## Training 
 ```
-!python train.py --num_epochs 2 --batch 2 --loss focalloss
+python train.py --num_epochs 30 --batch 4 --loss focalloss
 ```
