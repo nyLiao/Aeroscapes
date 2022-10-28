@@ -3,8 +3,9 @@ import torch
 import torch.utils.data
 import numpy as np
 import os
+import random
 from PIL import Image, ImageFile
-from torchvision.transforms import Compose, Resize, CenterCrop, ToTensor, Normalize,\
+from torchvision.transforms import Compose, Resize, CenterCrop, ToTensor, Normalize,RandomVerticalFlip,\
                                     RandomHorizontalFlip,RandomRotation,ColorJitter,RandomErasing,RandomAdjustSharpness,GaussianBlur,Pad
 try:
     from torchvision.transforms import InterpolationMode
@@ -19,18 +20,22 @@ def _convert_image_to_rgb(image):
 # for train_filename in train_filenames:
 #     print(train_filename)
 
-def train_data_transform(h,w):
+def train_data_transform(p1,p2):
     return Compose([
         # Resize((h,w), interpolation=BICUBIC),
         Pad((0,8)),
+        RandomHorizontalFlip(p=p1),
+        # RandomVerticalFlip(p=p2),
         _convert_image_to_rgb,
         ToTensor(),
         Normalize((0.48145466, 0.4578275, 0.40821073), (0.26862954, 0.26130258, 0.27577711)),
     ])
     
-def train_label_transform():
+def train_label_transform(p1,p2):
     return Compose([
         Pad((0,8)),
+        RandomHorizontalFlip(p=p1),
+        # RandomVerticalFlip(p=p2),
         # Resize((h,w), interpolation=BICUBIC),
         # ToTensor(),
     ])
@@ -97,8 +102,16 @@ class DatasetTrain(torch.utils.data.Dataset):
         # # convert numpy -> torch:
         # img = torch.from_numpy(img) 
         # label_img = torch.from_numpy(label_img) 
-        img = train_data_transform(self.new_img_h,self.new_img_w)(img)
-        label_img = train_label_transform()(torch.from_numpy(np.array(label_img,dtype=LONG)))
+        if random.random()> 0.5:
+            p1 = 1
+        else:
+            p1 = 0
+        if random.random()> 0.5:
+            p2 = 1
+        else:
+            p2 = 0
+        img = train_data_transform(p1,p2)(img)
+        label_img = train_label_transform(p1,p2)(torch.from_numpy(np.array(label_img,dtype=LONG)))
         # print(torch.where(label_img==2))
         return (img, label_img)
 
