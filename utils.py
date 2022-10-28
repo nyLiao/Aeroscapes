@@ -61,3 +61,16 @@ def intersectionAndUnionGPU(output, target, K, ignore_index=255):
     area_target = torch.histc(target, bins=K, min=0, max=K-1)
     area_union = area_output + area_target - area_intersection
     return area_intersection, area_union, area_target
+
+
+def divide_labels(labels):
+    stuff_labels = labels.clone()
+    for i in range(1,8):
+        stuff_labels[stuff_labels==i]=0
+    for i,j in zip(range(8,12),range(1,5)):
+        stuff_labels[stuff_labels==i]=j
+    thing_labels = labels.clone()
+    for i in range(8,12):
+        thing_labels[thing_labels==i]=0
+    
+    return stuff_labels,thing_labels

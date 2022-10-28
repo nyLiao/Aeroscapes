@@ -11,6 +11,7 @@ try:
     BICUBIC = InterpolationMode.BICUBIC
 except ImportError:
     BICUBIC = Image.BICUBIC
+    
 def _convert_image_to_rgb(image):
     return image.convert("RGB")
 # txt_file = open("ImageSets/trn.txt")
@@ -60,6 +61,14 @@ class DatasetTrain(torch.utils.data.Dataset):
             example = {}
             example["img_path"] = img_path
             example["label_img_path"] = label_img_path
+            label_img = Image.open(label_img_path).convert('L') 
+            label_img = np.array(label_img,dtype=LONG)
+            thing_count =0
+            for i in range(1,8):
+                thing_count+=np.sum(label_img==i)
+            # print(thing_count)
+            if thing_count/(1280*720)>0.0151:
+                 self.examples.append(example)
             self.examples.append(example)
 
         self.num_examples = len(self.examples)
@@ -90,6 +99,7 @@ class DatasetTrain(torch.utils.data.Dataset):
         # label_img = torch.from_numpy(label_img) 
         img = train_data_transform(self.new_img_h,self.new_img_w)(img)
         label_img = train_label_transform()(torch.from_numpy(np.array(label_img,dtype=LONG)))
+        # print(torch.where(label_img==2))
         return (img, label_img)
 
     def __len__(self):
