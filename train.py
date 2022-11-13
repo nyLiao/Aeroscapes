@@ -2,7 +2,7 @@ import numpy as np
 import os
 import sys
 import argparse
-import matplotlib.pyplot as plt
+# import matplotlib.pyplot as plt
 import torch
 from torch import nn
 import torchvision.transforms as transforms
@@ -14,12 +14,13 @@ from model import *
 from dataloader import DatasetTrain,DatasetVal
 from utils import *
 from torch.utils.data.distributed import DistributedSampler
-# device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
 
 def get_args():
     parser = argparse.ArgumentParser()
-    parser.add_argument('--data', type=str, default='/home/ubuntu/data/aeroscapes/', help='path to your dataset')
+    # parser.add_argument('--data', type=str, default='/home/ubuntu/data/aeroscapes/', help='path to your dataset')
+    # parser.add_argument('--data', type=str, default='/fs/resource/dataset/cv/aeroscapes/', help='path to your dataset')
+    parser.add_argument('--data', type=str, default='./data/', help='path to your dataset')
     parser.add_argument('--num_epochs', type=int, default=30, help='dnumber of epochs')
     parser.add_argument('--batch', type=int, default=4, help='batch size')
     parser.add_argument('--lr', type=float, default=1e-3, help='learning rate')
@@ -69,12 +70,18 @@ if __name__ == '__main__':
 
 
     # model = UNet(n_channels=3, n_classes=12, bilinear=True).to(device)
-    model = smp.Unet(
-    encoder_name="resnet34",        # choose encoder, e.g. mobilenet_v2 or efficientnet-b7
-    encoder_weights="imagenet",     # use `imagenet` pre-trained weights for encoder initialization
-    in_channels=3,                  # model input channels (1 for gray-scale images, 3 for RGB, etc.)
-    classes=12,                      # model output channels (number of classes in your dataset)
-        ).to(device) 
+    # model = smp.Unet(
+    #     encoder_name="resnet34",        # choose encoder, e.g. mobilenet_v2 or efficientnet-b7
+    #     encoder_weights="imagenet",     # use `imagenet` pre-trained weights for encoder initialization
+    #     in_channels=3,                  # model input channels (1 for gray-scale images, 3 for RGB, etc.)
+    #     classes=12,                      # model output channels (number of classes in your dataset)
+    # ).to(device)
+    model = smp.DeepLabV3(
+        encoder_name="resnet34",
+        encoder_weights="imagenet",
+        in_channels=3,
+        classes=12,
+    ).to(device)
     model = torch.nn.parallel.DistributedDataParallel(model.to(device), device_ids=[local_rank],
                                                       output_device=local_rank)
     optimizer = torch.optim.Adam(model.parameters(), lr=args.lr)
@@ -100,9 +107,10 @@ if __name__ == '__main__':
         loss_list = []
         acc_list = []
         for batch_i, (x, y) in enumerate(train_dataloader):
-            pred_mask = model(x.to(device))  
-            # stuff_pred_mask,thing_pred_mask = model(x.to(device))  
-            pred_mask = model(x.to(device)) 
+            if x.shape[0] < 2:
+                continue
+            pred_mask = model(x.to(device))
+            # stuff_pred_mask,thing_pred_mask = model(x.to(device))
             # print(pred_mask.shape,y.shape)
             # stuff_y, thing_y = divide_labels(y.to(device))
             loss = criterion(pred_mask, y.to(device))
@@ -139,8 +147,8 @@ if __name__ == '__main__':
             union_meter = AverageMeter()
             target_meter = AverageMeter()
             for batch_i, (x, y) in enumerate(val_dataloader):
-                with torch.no_grad():  
-                    pred_mask = model(x.to(device))   
+                with torch.no_grad():
+                    pred_mask = model(x.to(device))
                     # stuff_pred_mask,thing_pred_mask = model(x.to(device))
                 # pred_mask = stuff_pred_mask+thing_pred_mask
                 # back_pred_mask = (stuff_pred_mask[:,0,:,:]+thing_pred_mask[:,0,:,:])/2
@@ -157,10 +165,10 @@ if __name__ == '__main__':
                 val_loss = criterion(pred_mask, y.to(device))
                 val_loss_list.append(val_loss.cpu().detach())
             iou_class = intersection_meter.sum / (union_meter.sum + 1e-10)
-            mIoU = torch.mean(iou_class)            
-            print(' epoch {} - loss : {:.5f} - acc : {:.2f} - val loss : {:.5f} - val iou : {:.3f}'.format(epoch, 
-                                                                                                        np.mean(loss_list), 
-                                                                                                        np.mean(acc_list), 
+            mIoU = torch.mean(iou_class)
+            print(' epoch {} - loss : {:.5f} - acc : {:.2f} - val loss : {:.5f} - val iou : {:.3f}'.format(epoch,
+                                                                                                        np.mean(loss_list),
+                                                                                                        np.mean(acc_list),
                                                                                                         np.mean(val_loss_list),
                                                                                                         mIoU))
             for i,iou in enumerate(iou_class):
@@ -170,11 +178,12 @@ if __name__ == '__main__':
             is_best = mIoU > max_mIoU
             if is_best == True:
                 max_mIoU = max(mIoU, max_mIoU)
-                torch.save(model.state_dict(), './saved_models/unet_epoch_{}_{:.5f}.pt'.format(epoch,mIoU))
-        
+                torch.save(model.state_dict(), './saved_models/unet_epoch_{}_{:.5f}.pt'.format(epoch, mIoU))
+
 
     # plot loss
     # plot_losses = np.array(plot_losses)
+    print(plot_losses)
     # plt.figure(figsize=(12,8))
     # plt.plot(plot_losses[:,0], plot_losses[:,1], color='b', linewidth=4)
     # plt.plot(plot_losses[:,0], plot_losses[:,2], color='r', linewidth=4)
@@ -184,4 +193,3 @@ if __name__ == '__main__':
     # plt.grid()
     # plt.legend(['training', 'validation']) # using a named size
     # plt.savefig('loss_plots.png')
-
