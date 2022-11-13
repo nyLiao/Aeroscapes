@@ -1,0 +1,7 @@
+{
+    "model": "unet",
+    "num_epochs": 30,
+    "batch": 8,
+    "lr": 1e-3,
+    "loss": "focalloss"
+}

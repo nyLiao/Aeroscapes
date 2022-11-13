@@ -1,5 +1,7 @@
 import torch
 import numpy as np
+
+
 class AverageMeter(object):
     """Computes and stores the average and current value"""
     def __init__(self):
@@ -33,6 +35,10 @@ class AverageMeter(object):
 
     def average(self):
         return self.avg
+
+def acc(y, pred_mask):
+    seg_acc = (y.cpu() == torch.argmax(pred_mask, axis=1).cpu()).sum() / torch.numel(y.cpu())
+    return seg_acc
 
 def intersectionAndUnion(output, target, K, ignore_index=255):
     # 'K' classes, output and target sizes are N or N * L or N * H * W, each value in range 0 to K - 1.
@@ -72,5 +78,5 @@ def divide_labels(labels):
     thing_labels = labels.clone()
     for i in range(8,12):
         thing_labels[thing_labels==i]=0
-    
+
     return stuff_labels,thing_labels

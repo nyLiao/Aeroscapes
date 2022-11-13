@@ -29,6 +29,14 @@ def get_args():
     parser.add_argument('--local_rank', type=int, default=-1)
     return prepare_opt(parser)
 
+def acc(y, pred_mask):
+    seg_acc = (y.cpu() == torch.argmax(pred_mask, axis=1).cpu()).sum() / torch.numel(y.cpu())
+    return seg_acc
+
+def cosine_annealing(step, total_steps, lr_max, lr_min):
+    return lr_min + (lr_max -
+                     lr_min) * 0.5 * (1 + np.cos(step / total_steps * np.pi))
+
 
 if __name__ == '__main__':
     dist.init_process_group(backend="nccl")
@@ -45,16 +53,16 @@ if __name__ == '__main__':
     train_dataloader = torch.utils.data.DataLoader(train_dataset,sampler=train_sampler,batch_size=BACH_SIZE, num_workers=28)
     val_dataloader = torch.utils.data.DataLoader(val_dataset, batch_size=BACH_SIZE, shuffle=False, num_workers=28)
 
-    flag_run = "{}_date".format(args.loss)
-    logger = Logger(prj_name=args.model, flag_run=flag_run)
-    logger.save_opt(args)
-    model_logger = ModelLogger(logger, state_only=True)
-    model_logger.metric_name = 'iou'
-
     # ===== Loss =====
     if args.loss == 'focalloss':
         # criterion = WeightedFocalLoss(gamma=3/4).to(device)
+        alpha = [0.25]
+        for i in range(11):
+            alpha.append(0.75)
+        # print(len(alpha))
         criterion = FocalLoss(gamma=3/4,alpha=[0.5,1,2,1,1,1,1,2,0.75,0.75,0.75,0.75]).to(device)
+        # stuff_criterion = FocalLoss(gamma=3/4,alpha=[0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,1,1,1,1]).to(device)
+        # thing_criterion = FocalLoss(gamma=3/4,alpha=[0.5,1,1,1,1,1,1,1,0.5,0.5,0.5,0.5]).to(device)
     elif args.loss == 'iouloss':
         criterion = mIoULoss(n_classes=12).to(device)
     elif args.loss == 'crossentropy':
@@ -62,7 +70,7 @@ if __name__ == '__main__':
         stuff_criterion = nn.CrossEntropyLoss(weight=torch.FloatTensor([1,1,1,1,1,1,1,1,2,2,2,2])).to(device)
         thing_criterion = nn.CrossEntropyLoss(weight=torch.FloatTensor([1,1,1,1,1,1,1,1,2,2,2,2])).to(device)
     else:
-        raise NotImplementedError("Loss {} not found!".format(args.loss))
+        print('Loss function not found!')
 
     # ===== Model =====
     if args.model == 'unet':
@@ -79,9 +87,6 @@ if __name__ == '__main__':
             in_channels=3,
             classes=12,
         )
-    else:
-        raise NotImplementedError("Model {} not found!".format(args.model))
-    model_logger.regi_model(model, save_init=False)
     model = torch.nn.parallel.DistributedDataParallel(model.to(device), device_ids=[local_rank],
                                                       output_device=local_rank)
     optimizer = torch.optim.Adam(model.parameters(), lr=args.lr)
@@ -94,19 +99,29 @@ if __name__ == '__main__':
                 1e-6 / args.lr,
             ),
         )
+    max_mIoU = -1
+    plot_losses = []
 
     for epoch in range(N_EPOCHS):
-        # ===== training =====
+        # training
         model.train()
         train_sampler.set_epoch(epoch)
         loss_list = []
         acc_list = []
         for batch_i, (x, y) in enumerate(train_dataloader):
-            # BatchNorm crash when batch size < 2
             if x.shape[0] < 2:
                 continue
             pred_mask = model(x.to(device))
+            # stuff_pred_mask,thing_pred_mask = model(x.to(device))
+            # print(pred_mask.shape,y.shape)
+            # stuff_y, thing_y = divide_labels(y.to(device))
             loss = criterion(pred_mask, y.to(device))
+            # stuff_loss = stuff_criterion(stuff_pred_mask, y.to(device))
+            # thing_loss = thing_criterion(thing_pred_mask, y.to(device))
+            # print(thing_pred_mask.shape,stuff_pred_mask.shape)
+            # pred_mask = stuff_pred_mask+thing_pred_mask
+            # pred_mask = torch.cat((thing_pred_mask,stuff_pred_mask),dim=1)
+            # loss= stuff_loss+thing_loss
             optimizer.zero_grad()
             loss.backward()
             optimizer.step()
@@ -114,18 +129,36 @@ if __name__ == '__main__':
             loss_list.append(loss.cpu().detach().numpy())
             acc_list.append(acc(y,pred_mask).numpy())
 
-            msg = f"\rEpoch {epoch+1}/{N_EPOCHS} | Batch {batch_i+1}/{len(train_dataloader)} | Loss {loss.cpu().detach().numpy():.6f} / {np.mean(loss_list):.6f}"
-            sys.stdout.write(msg)
-
-        # ===== testing =====
-        if local_rank == 0:
+            sys.stdout.write(
+                "\r[Epoch %d/%d] [Batch %d/%d] [Loss: %f (%f)]"
+                % (
+                    epoch,
+                    N_EPOCHS,
+                    batch_i,
+                    len(train_dataloader),
+                    loss.cpu().detach().numpy(),
+                    np.mean(loss_list),
+                )
+            )
+        # testing
+        if local_rank==0:
             model.eval()
             val_loss_list = []
+            val_iou_list = []
             intersection_meter = AverageMeter()
             union_meter = AverageMeter()
+            target_meter = AverageMeter()
             for batch_i, (x, y) in enumerate(val_dataloader):
                 with torch.no_grad():
                     pred_mask = model(x.to(device))
+                    # stuff_pred_mask,thing_pred_mask = model(x.to(device))
+                # pred_mask = stuff_pred_mask+thing_pred_mask
+                # back_pred_mask = (stuff_pred_mask[:,0,:,:]+thing_pred_mask[:,0,:,:])/2
+                # back_pred_mask = back_pred_mask.unsqueeze(dim=1)
+                # stuff_pred_mask = stuff_pred_mask[:,8:,:,:]
+                # thing_pred_mask = thing_pred_mask[:,1:8,:,:]
+                # print(back_pred_mask.shape,thing_pred_mask.shape,stuff_pred_mask.shape)
+                # pred_mask = torch.cat((back_pred_mask,thing_pred_mask,stuff_pred_mask),dim=1)
                 pred_mask = torch.softmax(pred_mask, dim=1)
                 pred = torch.argmax(pred_mask, dim=1)
                 intersection, union, target = intersectionAndUnionGPU(pred, y.to(device), 12)
@@ -133,15 +166,32 @@ if __name__ == '__main__':
                 union_meter.update(union)
                 val_loss = criterion(pred_mask, y.to(device))
                 val_loss_list.append(val_loss.cpu().detach())
-
             iou_class = intersection_meter.sum / (union_meter.sum + 1e-10)
             mIoU = torch.mean(iou_class)
-            msg = f"Epoch:{epoch+1:04d} | trn loss:{np.mean(loss_list):.5f}, trn acc:{np.mean(acc_list):.4f} | val loss:{np.mean(val_loss_list):.5f}, val iou:{mIoU:.4f}"
-            logger.print(msg)
-            msg = '\tiou class:' + ','.join('{:.6f}'.format(i) for i in iou_class)
-            logger.print(msg)
+            print(' epoch {} - loss : {:.5f} - acc : {:.2f} - val loss : {:.5f} - val iou : {:.3f}'.format(epoch,
+                                                                                                        np.mean(loss_list),
+                                                                                                        np.mean(acc_list),
+                                                                                                        np.mean(val_loss_list),
+                                                                                                        mIoU))
+            for i,iou in enumerate(iou_class):
+                print('{}:{}'.format(i,iou))
+            plot_losses.append([epoch, np.mean(loss_list), np.mean(val_loss_list)])
 
-            model_logger.save_best(mIoU, epoch=epoch)
-            model_logger.save_epoch(epoch=epoch, period=N_EPOCHS)
+            is_best = mIoU > max_mIoU
+            if is_best == True:
+                max_mIoU = max(mIoU, max_mIoU)
+                torch.save(model.state_dict(), './saved_models/unet_epoch_{}_{:.5f}.pt'.format(epoch, mIoU))
 
-    logger.print_on_top(f"Val best: {model_logger.metric_best:0.4f}, epoch: {model_logger.epoch_best}")
+
+    # plot loss
+    # plot_losses = np.array(plot_losses)
+    print(plot_losses)
+    # plt.figure(figsize=(12,8))
+    # plt.plot(plot_losses[:,0], plot_losses[:,1], color='b', linewidth=4)
+    # plt.plot(plot_losses[:,0], plot_losses[:,2], color='r', linewidth=4)
+    # plt.title(args.loss, fontsize=20)
+    # plt.xlabel('epoch',fontsize=20)
+    # plt.ylabel('loss',fontsize=20)
+    # plt.grid()
+    # plt.legend(['training', 'validation']) # using a named size
+    # plt.savefig('loss_plots.png')

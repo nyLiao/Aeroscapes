@@ -3,6 +3,13 @@ import torch.nn as nn
 import torch.nn.functional as F
 from torch.autograd import Variable
 import numpy as np
+
+
+def cosine_annealing(step, total_steps, lr_max, lr_min):
+    return lr_min + (lr_max -
+                     lr_min) * 0.5 * (1 + np.cos(step / total_steps * np.pi))
+
+
 class FocalLoss(nn.Module):
     def __init__(self, gamma=0.75, alpha=None, size_average=True):
         super(FocalLoss, self).__init__()
@@ -23,7 +30,7 @@ class FocalLoss(nn.Module):
         logpt = logpt.gather(1,target.type(torch.int64))
         logpt = logpt.view(-1)
         pt = Variable(logpt.data.exp())
-        
+
         if self.alpha is not None:
             if self.alpha.type()!=input.data.type():
                 self.alpha = self.alpha.type_as(input.data)
@@ -54,14 +61,14 @@ class mIoULoss(nn.Module):
 
         # predicted probabilities for each pixel along channel
         inputs = F.softmax(inputs,dim=1)
-        
+
         # Numerator Product
         target_oneHot = self.to_one_hot(target)
         inter = inputs * target_oneHot
         ## Sum over all pixels N x C x H x W => N x C
         inter = inter.view(N,self.classes,-1).sum(2)
 
-        #Denominator 
+        #Denominator
         union= inputs + target_oneHot - (inputs*target_oneHot)
         ## Sum over all pixels N x C x H x W => N x C
         union = union.view(N,self.classes,-1).sum(2)
@@ -70,8 +77,8 @@ class mIoULoss(nn.Module):
 
         ## Return average loss over classes and batch
         return 1-loss.mean()
-    
-    
+
+
 class WeightedFocalLoss(nn.Module):
     def __init__(self, gamma=0, alpha=None, size_average=True):
         super(WeightedFocalLoss, self).__init__()
