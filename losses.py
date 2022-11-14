@@ -10,6 +10,22 @@ def cosine_annealing(step, total_steps, lr_max, lr_min):
                      lr_min) * 0.5 * (1 + np.cos(step / total_steps * np.pi))
 
 
+def get_loss(name):
+    if name == 'focalloss':
+        # criterion = WeightedFocalLoss(gamma=3/4)
+        return FocalLoss(gamma=3/4,alpha=[0.5,1,2,1,1,1,1,2,0.75,0.75,0.75,0.75])
+    elif name == 'iouloss':
+        return mIoULoss(n_classes=12)
+    elif name == 'crossentropy':
+        return nn.CrossEntropyLoss()
+    elif name == 'mhcrossentropy':
+        stuff_criterion = nn.CrossEntropyLoss(weight=torch.FloatTensor([1,1,1,1,1,1,1,1,2,2,2,2])).to(device)
+        thing_criterion = nn.CrossEntropyLoss(weight=torch.FloatTensor([1,1,1,1,1,1,1,1,2,2,2,2])).to(device)
+        return stuff_criterion, thing_criterion
+    else:
+        raise NotImplementedError("Loss {} not found!".format(name))
+
+
 class FocalLoss(nn.Module):
     def __init__(self, gamma=0.75, alpha=None, size_average=True):
         super(FocalLoss, self).__init__()

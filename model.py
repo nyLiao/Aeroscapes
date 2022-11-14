@@ -7,6 +7,34 @@ import segmentation_models_pytorch as smp
 from segmentation_models_pytorch.decoders.unet.decoder import UnetDecoder
 from typing import Optional, Union, List
 
+
+def get_model(name):
+    if name == 'unet':
+        model = smp.Unet(
+            encoder_name="resnet34",
+            encoder_weights="imagenet",
+            in_channels=3,
+            classes=12,
+        )
+    elif name == 'deeplabv3':
+        model = smp.DeepLabV3(
+            encoder_name="resnet34",
+            encoder_weights="imagenet",
+            in_channels=3,
+            classes=12,
+        )
+    elif name == 'mhunet':
+        model = DoubleHeadUnet(
+            encoder_name="resnet34",
+            encoder_weights="imagenet",
+            in_channels=3,
+            classes=12,
+        )
+    else:
+        raise NotImplementedError("Model {} not found!".format(name))
+    return model
+
+
 class DoubleHeadUnet(smp.Unet):
     def __init__(
         self,
@@ -51,7 +79,7 @@ class DoubleHeadUnet(smp.Unet):
             activation=activation,
             kernel_size=3,
         )
-        
+
         self.stuff_segmentation_head = SegmentationHead(
             in_channels=decoder_channels[-1],
             out_channels=12,
@@ -67,7 +95,7 @@ class DoubleHeadUnet(smp.Unet):
         self.name = "u-{}".format(encoder_name)
         self.initialize()
 
-    
+
     def forward(self, x):
         """Sequentially pass `x` trough model`s encoder, decoder and heads"""
 
@@ -81,4 +109,3 @@ class DoubleHeadUnet(smp.Unet):
         thing_masks = self.thing_segmentation_head(decoder_output)
 
         return stuff_masks,thing_masks
-    

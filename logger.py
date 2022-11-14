@@ -223,7 +223,7 @@ class ModelLogger(ABC):
         name = '_'.join((self.prefix,) + suffix)
         path = self.logger.path_join(name + '.pth')
 
-        self.model.cpu()
+        # self.model.cpu()
         if self.state_only:
             torch.save(self.state_dict, path)
         else:
@@ -254,11 +254,11 @@ class ModelLogger(ABC):
             self.save(str(epoch+1))
             self.save_state(str(epoch+1), epoch=epoch)
 
-    def print_best(self, top=True):
+    def print_best(self, top=False):
         if top:
-            self.logger.print_on_top(f'[best]  Epoch {self.epoch_best:>3},  {self.metric_name}: {self.metric_best:>.4f}')
+            self.logger.print_on_top(f'[best]  Epoch {self.epoch_best+1:>3},  {self.metric_name}: {self.metric_best:>.4f}')
         else:
-            self.logger.print(f'[best]  Epoch {self.epoch_best:>3},  {self.metric_name}: {self.metric_best:>.4f}')
+            self.logger.print(f'[best]  Epoch {self.epoch_best+1:>3},  {self.metric_name}: {self.metric_best:>.4f}')
 
     def save_best(self, metric_curr, epoch=-1, verbose=True):
         """

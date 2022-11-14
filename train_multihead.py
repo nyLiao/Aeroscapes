@@ -14,6 +14,7 @@ from model import *
 from dataloader import DatasetTrain,DatasetVal
 from utils import *
 from logger import Logger, ModelLogger, prepare_opt
+import warnings
 
 
 def get_args():
@@ -39,6 +40,7 @@ def cosine_annealing(step, total_steps, lr_max, lr_min):
 
 
 if __name__ == '__main__':
+    warnings.warn("MH not complete!")
     dist.init_process_group(backend="nccl")
     args = get_args()
     local_rank = int(args.local_rank)
@@ -54,39 +56,11 @@ if __name__ == '__main__':
     val_dataloader = torch.utils.data.DataLoader(val_dataset, batch_size=BACH_SIZE, shuffle=False, num_workers=28)
 
     # ===== Loss =====
-    if args.loss == 'focalloss':
-        # criterion = WeightedFocalLoss(gamma=3/4).to(device)
-        alpha = [0.25]
-        for i in range(11):
-            alpha.append(0.75)
-        # print(len(alpha))
-        criterion = FocalLoss(gamma=3/4,alpha=[0.5,1,2,1,1,1,1,2,0.75,0.75,0.75,0.75]).to(device)
-        # stuff_criterion = FocalLoss(gamma=3/4,alpha=[0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,1,1,1,1]).to(device)
-        # thing_criterion = FocalLoss(gamma=3/4,alpha=[0.5,1,1,1,1,1,1,1,0.5,0.5,0.5,0.5]).to(device)
-    elif args.loss == 'iouloss':
-        criterion = mIoULoss(n_classes=12).to(device)
-    elif args.loss == 'crossentropy':
-        criterion = nn.CrossEntropyLoss().to(device)
-        stuff_criterion = nn.CrossEntropyLoss(weight=torch.FloatTensor([1,1,1,1,1,1,1,1,2,2,2,2])).to(device)
-        thing_criterion = nn.CrossEntropyLoss(weight=torch.FloatTensor([1,1,1,1,1,1,1,1,2,2,2,2])).to(device)
-    else:
-        print('Loss function not found!')
+    criterion = get_loss(args.loss)
+    criterion = criterion.to(device)
 
     # ===== Model =====
-    if args.model == 'unet':
-        model = smp.Unet(
-            encoder_name="resnet34",
-            encoder_weights="imagenet",
-            in_channels=3,
-            classes=12,
-        )
-    elif args.model == 'deeplabv3':
-        model = smp.DeepLabV3(
-            encoder_name="resnet34",
-            encoder_weights="imagenet",
-            in_channels=3,
-            classes=12,
-        )
+    model = get_model(args.model)
     model = torch.nn.parallel.DistributedDataParallel(model.to(device), device_ids=[local_rank],
                                                       output_device=local_rank)
     optimizer = torch.optim.Adam(model.parameters(), lr=args.lr)

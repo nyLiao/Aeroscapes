@@ -20,12 +20,13 @@ def get_args():
     parser = argparse.ArgumentParser()
     # parser.add_argument('--data', type=str, default='/home/ubuntu/data/aeroscapes/', help='path to your dataset')
     # parser.add_argument('--data', type=str, default='/fs/resource/dataset/cv/aeroscapes/', help='path to your dataset')
-    parser.add_argument('--data', type=str, default='./data/', help='path to your dataset')
-    parser.add_argument('--config', type=str, default='./config/unet.json', help='path to config JSON')
+    parser.add_argument('-d', '--data', type=str, default='./data/', help='path to your dataset')
+    parser.add_argument('-c', '--config', type=str, default='./config/unet.json', help='path to config JSON')
     # parser.add_argument('--num_epochs', type=int, default=30, help='dnumber of epochs')
     # parser.add_argument('--batch', type=int, default=4, help='batch size')
     # parser.add_argument('--lr', type=float, default=1e-3, help='learning rate')
     # parser.add_argument('--loss', type=str, default='focalloss', help='focalloss | iouloss | crossentropy')
+    parser.add_argument('--nworker', type=int, default=28)
     parser.add_argument('--local_rank', type=int, default=-1)
     return prepare_opt(parser)
 
@@ -42,8 +43,8 @@ if __name__ == '__main__':
     train_dataset = DatasetTrain(args.data)
     val_dataset = DatasetVal(args.data)
     train_sampler = DistributedSampler(train_dataset)
-    train_dataloader = torch.utils.data.DataLoader(train_dataset,sampler=train_sampler,batch_size=BACH_SIZE, num_workers=28)
-    val_dataloader = torch.utils.data.DataLoader(val_dataset, batch_size=BACH_SIZE, shuffle=False, num_workers=28)
+    train_dataloader = torch.utils.data.DataLoader(train_dataset,sampler=train_sampler,batch_size=BACH_SIZE, num_workers=args.nworker)
+    val_dataloader = torch.utils.data.DataLoader(val_dataset, batch_size=BACH_SIZE, shuffle=False, num_workers=args.nworker)
 
     flag_run = "{}_date".format(args.loss)
     logger = Logger(prj_name=args.model, flag_run=flag_run)
@@ -52,35 +53,11 @@ if __name__ == '__main__':
     model_logger.metric_name = 'iou'
 
     # ===== Loss =====
-    if args.loss == 'focalloss':
-        # criterion = WeightedFocalLoss(gamma=3/4).to(device)
-        criterion = FocalLoss(gamma=3/4,alpha=[0.5,1,2,1,1,1,1,2,0.75,0.75,0.75,0.75]).to(device)
-    elif args.loss == 'iouloss':
-        criterion = mIoULoss(n_classes=12).to(device)
-    elif args.loss == 'crossentropy':
-        criterion = nn.CrossEntropyLoss().to(device)
-        stuff_criterion = nn.CrossEntropyLoss(weight=torch.FloatTensor([1,1,1,1,1,1,1,1,2,2,2,2])).to(device)
-        thing_criterion = nn.CrossEntropyLoss(weight=torch.FloatTensor([1,1,1,1,1,1,1,1,2,2,2,2])).to(device)
-    else:
-        raise NotImplementedError("Loss {} not found!".format(args.loss))
+    criterion = get_loss(args.loss)
+    criterion = criterion.to(device)
 
     # ===== Model =====
-    if args.model == 'unet':
-        model = smp.Unet(
-            encoder_name="resnet34",
-            encoder_weights="imagenet",
-            in_channels=3,
-            classes=12,
-        )
-    elif args.model == 'deeplabv3':
-        model = smp.DeepLabV3(
-            encoder_name="resnet34",
-            encoder_weights="imagenet",
-            in_channels=3,
-            classes=12,
-        )
-    else:
-        raise NotImplementedError("Model {} not found!".format(args.model))
+    model = get_model(args.model)
     model_logger.regi_model(model, save_init=False)
     model = torch.nn.parallel.DistributedDataParallel(model.to(device), device_ids=[local_rank],
                                                       output_device=local_rank)
@@ -117,6 +94,7 @@ if __name__ == '__main__':
             msg = f"\rEpoch {epoch+1}/{N_EPOCHS} | Batch {batch_i+1}/{len(train_dataloader)} | Loss {loss.cpu().detach().numpy():.6f} / {np.mean(loss_list):.6f}"
             sys.stdout.write(msg)
 
+        print()
         # ===== testing =====
         if local_rank == 0:
             model.eval()
