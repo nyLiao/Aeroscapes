@@ -3,5 +3,6 @@
     "num_epochs": 30,
     "batch": 8,
     "lr": 1e-3,
-    "loss": "dice"
+    "loss": "focalloss",
+    "gamma": 0.75
 }

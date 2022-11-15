@@ -44,15 +44,15 @@ if __name__ == '__main__':
     train_dataloader = torch.utils.data.DataLoader(train_dataset,sampler=train_sampler,batch_size=BACH_SIZE, num_workers=args.nworker)
     val_dataloader = torch.utils.data.DataLoader(val_dataset, batch_size=BACH_SIZE, shuffle=False, num_workers=args.nworker)
 
-    flag_run = "{}_date".format(args.loss)
+    # ===== Loss =====
+    criterion, flag_loss = get_loss(args.loss, args)
+    criterion = criterion.to(device)
+
+    flag_run = "{}_date".format(flag_loss)
     logger = Logger(prj_name=args.model, flag_run=flag_run)
     logger.save_opt(args)
     model_logger = ModelLogger(logger, state_only=True)
     model_logger.metric_name = 'iou'
-
-    # ===== Loss =====
-    criterion = get_loss(args.loss)
-    criterion = criterion.to(device)
 
     # ===== Model =====
     model = get_model(args.model)
