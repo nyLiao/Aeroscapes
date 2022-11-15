@@ -1,5 +1,5 @@
 # -*- coding:utf-8 -*-
-""" Plot confusion matrix on validation set
+""" Get confusion matrix on validation set
 File: logger.py
 File Created: 2022-11-15
 Author: nyLiao
@@ -40,23 +40,6 @@ def restore_model(mname, logger):
     model.eval()
     return model
 
-def plot_confmat(cfm_rn):
-    fig, ax = plt.subplots(figsize=(8, 5))
-
-    img = plt.imshow(cfm_rn, interpolation='nearest',
-                    cmap=plt.cm.Blues, vmin=0.0, vmax=1.0)
-    # set labels
-    n_cls = cfm_rn.shape[0]
-    fig.colorbar(img, ax=ax, fraction=0.046, pad=0.04)
-    labs = ['bckgrnd', 'person', 'bike', 'car', 'drone', 'boat', 'animal', 'obstacle', 'cnstn', 'plant', 'road', 'sky']
-    ax.set(yticks=np.arange(n_cls), yticklabels=labs,
-            ylabel='True Label', xlabel='Predicted Label')
-    ax.set_xticks(np.arange(n_cls), labs, rotation='vertical')
-
-    fig.tight_layout()
-    plt.show()
-    return fig
-
 
 if __name__ == '__main__':
     args = get_args()
@@ -90,10 +73,7 @@ if __name__ == '__main__':
 
         y_pred = y_pred.reshape(-1).numpy()
         y_true = y_true.reshape(-1).numpy()
-        cfm = sklearn.metrics.confusion_matrix(y_true, y_pred, labels=range(12))
+        cfm = sklearn.metrics.confusion_matrix(y_true, y_pred, labels=range(12), normalize=None)
         cfms += cfm
 
-    cfm_rn = cfms / cfms.sum(axis=1, keepdims=True)
-    cfm_rn.shape
-    fig = plot_confmat(cfm_rn)
-    fig.savefig(logger.path_join('conf_mat.pdf'), bbox_inches='tight')
+    np.save(logger.path_join('conf_mat.npy'), cfms)
