@@ -19,8 +19,8 @@ def get_loss(name):
     elif name == 'crossentropy':
         return nn.CrossEntropyLoss()
     elif name == 'mhcrossentropy':
-        stuff_criterion = nn.CrossEntropyLoss(weight=torch.FloatTensor([1,1,1,1,1,1,1,1,2,2,2,2])).to(device)
-        thing_criterion = nn.CrossEntropyLoss(weight=torch.FloatTensor([1,1,1,1,1,1,1,1,2,2,2,2])).to(device)
+        stuff_criterion = nn.CrossEntropyLoss(weight=torch.FloatTensor([1,1,1,1,1,1,1,1,2,2,2,2]))
+        thing_criterion = nn.CrossEntropyLoss(weight=torch.FloatTensor([1,1,1,1,1,1,1,1,2,2,2,2]))
         return stuff_criterion, thing_criterion
     else:
         raise NotImplementedError("Loss {} not found!".format(name))

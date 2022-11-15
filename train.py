@@ -1,16 +1,14 @@
-import numpy as np
 import os
 import sys
 import argparse
+import numpy as np
 
 import torch
-from torch import nn
 import torch.distributed as dist
 from torch.utils.data.distributed import DistributedSampler
-import segmentation_models_pytorch as smp
 
-from losses import *
-from model import *
+from losses import get_loss, cosine_annealing
+from model import get_model
 from dataloader import DatasetTrain,DatasetVal
 from utils import *
 from logger import Logger, ModelLogger, prepare_opt

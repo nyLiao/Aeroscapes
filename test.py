@@ -18,8 +18,6 @@ def get_args():
     parser.add_argument('-d', '--data', type=str, default='./data/', help='path to your dataset')
     parser.add_argument('-c', '--config', type=str, default='./config/unet.json', help='path to config JSON')
     parser.add_argument('-f', '--flag', type=str, help='id of the run')
-    # parser.add_argument('--batch', type=int, default=2, help='batch size')
-    # parser.add_argument('--loss', type=str, default='crossentropy', help='focalloss | iouloss | crossentropy')
     return prepare_opt(parser)
 
 

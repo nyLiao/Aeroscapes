@@ -15,10 +15,6 @@ except ImportError:
 
 def _convert_image_to_rgb(image):
     return image.convert("RGB")
-# txt_file = open("ImageSets/trn.txt")
-# train_filenames = txt_file.readlines()
-# for train_filename in train_filenames:
-#     print(train_filename)
 
 def train_data_transform(p1,p2):
     return Compose([
@@ -83,12 +79,10 @@ class DatasetTrain(torch.utils.data.Dataset):
         example = self.examples[index]
 
         img_path = example["img_path"]
-        # print(img_path)
         img = Image.open(img_path)
         # img = cv2.resize(img, (self.new_img_w, self.new_img_h),
         #                  interpolation=cv2.INTER_NEAREST)
         label_img_path = example["label_img_path"]
-        # print(label_img_path)
         label_img = Image.open(label_img_path).convert('L')
         # label_img = cv2.resize(label_img, (self.new_img_w, self.new_img_h),
                             #    interpolation=cv2.INTER_NEAREST)
@@ -111,11 +105,47 @@ class DatasetTrain(torch.utils.data.Dataset):
             p2 = 0
         img = train_data_transform(p1,p2)(img)
         label_img = train_label_transform(p1,p2)(torch.from_numpy(np.array(label_img,dtype=LONG)))
-        # print(torch.where(label_img==2))
         return (img, label_img)
 
     def __len__(self):
         return self.num_examples
+
+
+class DatasetTrainClean(DatasetTrain):
+    def __init__(self, base_dir):
+        self.base_dir = base_dir
+        self.img_dir = base_dir + "JPEGImages/"
+        self.label_dir = base_dir + "SegmentationClass/"
+
+        self.examples = []
+        txt_path = self.base_dir + "ImageSets/trn.txt"
+        txt_file = open(txt_path)
+        train_filenames = txt_file.readlines()
+        train_img_dir_path = self.img_dir
+        label_img_dir_path = self.label_dir
+
+        for train_filename in train_filenames:
+            train_filename=train_filename.strip('\n')
+            img_path = train_img_dir_path + train_filename + '.jpg'
+            label_img_path = label_img_dir_path + train_filename + '.png'
+            example = {}
+            example["img_path"] = img_path
+            example["label_img_path"] = label_img_path
+            self.examples.append(example)
+
+        self.num_examples = len(self.examples)
+
+    def __getitem__(self, index):
+        example = self.examples[index]
+
+        img_path = example["img_path"]
+        img = Image.open(img_path)
+        label_img_path = example["label_img_path"]
+        label_img = Image.open(label_img_path)
+        img = np.array(img,dtype=LONG)
+        label_img = np.array(label_img,dtype=LONG)
+        return (img, label_img)
+
 
 def val_data_transform(h,w):
     return Compose([
@@ -167,12 +197,10 @@ class DatasetVal(torch.utils.data.Dataset):
         example = self.examples[index]
 
         img_path = example["img_path"]
-        # print(img_path)
         img = Image.open(img_path)
         # img = cv2.resize(img, (self.new_img_w, self.new_img_h),
                         #  interpolation=cv2.INTER_NEAREST)
         label_img_path = example["label_img_path"]
-        # print(label_img_path)
         label_img = Image.open(label_img_path)
         # label_img = cv2.resize(label_img, (self.new_img_w, self.new_img_h),
         #                        interpolation=cv2.INTER_NEAREST)
@@ -200,10 +228,8 @@ class DatasetClean(DatasetVal):
         example = self.examples[index]
 
         img_path = example["img_path"]
-        # print(img_path)
         img = Image.open(img_path)
         label_img_path = example["label_img_path"]
-        # print(label_img_path)
         label_img = Image.open(label_img_path)
         img = np.array(img,dtype=LONG)
         label_img = np.array(label_img,dtype=LONG)
