@@ -23,6 +23,13 @@ def get_model(name):
             in_channels=3,
             classes=12,
         )
+    elif name == 'deeplabv3plus':
+        model = smp.DeepLabV3Plus(
+            encoder_name="resnet34",
+            encoder_weights="imagenet",
+            in_channels=3,
+            classes=12,
+        )
     elif name == 'mhunet':
         model = DoubleHeadUnet(
             encoder_name="resnet34",

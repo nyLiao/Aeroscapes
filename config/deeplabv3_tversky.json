@@ -1,0 +1,10 @@
+{
+    "model": "deeplabv3",
+    "num_epochs": 30,
+    "batch": 8,
+    "lr": 1e-3,
+    "loss": "tversky",
+    "alpha": 0.7,
+    "beta": 0.3,
+    "gamma": 1.0
+}

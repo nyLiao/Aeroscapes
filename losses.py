@@ -19,6 +19,8 @@ def get_loss(name, args):
         return criterion, flag
     elif name == 'iouloss':
         return mIoULoss(n_classes=12), 'iouloss'
+    elif name == 'iouloss2':
+        return mIoULoss2(n_classes=12), 'iouloss2'
     elif name == 'crossentropy':
         return nn.CrossEntropyLoss(), 'crossentropy'
     elif name == 'mhcrossentropy':
@@ -120,6 +122,44 @@ class mIoULoss(nn.Module):
         return 1-loss.mean()
 
 
+class mIoULoss2(nn.Module):
+    def __init__(self, weight=None, n_classes=12):
+        super(mIoULoss2, self).__init__()
+        self.classes = n_classes
+        self.eps = 1e-7
+
+    def compute_score(self, output, target, smooth, eps, dims):
+        assert output.size() == target.size()
+        if dims is not None:
+            intersection = torch.sum(output * target, dim=dims)
+            cardinality = torch.sum(output + target, dim=dims)
+        else:
+            intersection = torch.sum(output * target)
+            cardinality = torch.sum(output + target)
+
+        union = cardinality - intersection
+        jaccard_score = (intersection + smooth) / (union + smooth).clamp_min(eps)
+        return jaccard_score
+
+    def forward(self, input, target):
+        input = input.log_softmax(dim=1).exp()
+        bs = target.size(0)
+        num_classes = input.size(1)
+        dims = (0, 2)
+
+        target = target.view(bs, -1)
+        input = input.view(bs, num_classes, -1)
+
+        target = F.one_hot(target, num_classes)  # N,H*W -> N,H*W, C
+        target = target.permute(0, 2, 1)  # H, C, H*W
+
+        scores = self.compute_score(input, target.type(input.dtype), smooth=0., eps=self.eps, dims=dims)
+        loss = 1.0 - scores
+        mask = target.sum(dims) > 0
+        loss *= mask.float()
+        return loss.mean()
+
+
 class DiceLoss(nn.Module):
     def __init__(self, smooth=0.0, eps=1e-7, n_classes=12):
         super(DiceLoss, self).__init__()
@@ -160,8 +200,8 @@ class DiceLoss(nn.Module):
 class TverskyLoss(DiceLoss):
     def __init__(self, smooth=0.0, eps=1e-7, alpha=0.5, beta=0.5, gamma=1.0):
         super(TverskyLoss, self).__init__(smooth, eps)
-        self.alpha = alpha
-        self.beta = beta
+        self.alpha = alpha  # false negative
+        self.beta = beta    # false positive
         self.gamma = gamma
 
     def compute_score(self, output, target, smooth, eps, dims):
@@ -175,7 +215,7 @@ class TverskyLoss(DiceLoss):
             fp = torch.sum(output * (1. - target))
             fn = torch.sum((1 - output) * target)
 
-        tversky_score = (intersection + smooth) / (intersection + self.alpha * fp + self.beta * fn + smooth).clamp_min(eps)
+        tversky_score = (intersection + smooth) / (intersection + self.alpha * fn + self.beta * fp + smooth).clamp_min(eps)
         return tversky_score
 
     def aggregate_loss(self, loss):
