@@ -2,7 +2,7 @@ import os
 import sys
 import argparse
 import numpy as np
-from tqdm import tqdm
+
 import torch
 
 from model import *
@@ -21,7 +21,9 @@ def get_args():
     return prepare_opt(parser)
 
 
-def restore_model(mname, logger):
+def restore_model(mname, flag):
+    logger = Logger(prj_name=mname, flag_run=flag)
+    # logger.load_opt(args)
     assert logger.path_existed, f"Path {logger.dir_save} not found"
     model_logger = ModelLogger(logger, state_only=True)
     model_logger.metric_name = 'iou'
@@ -41,24 +43,30 @@ if __name__ == '__main__':
     val_dataloader = torch.utils.data.DataLoader(val_dataset, batch_size=BACH_SIZE, shuffle=False, num_workers=1)
 
     flag_run = "{}_{}".format(args.loss, args.flag)
-    logger = Logger(prj_name=args.model, flag_run=flag_run)
-    model = restore_model(args.model, logger)
+    model = restore_model(args.model, flag_run)
 
     intersection_meter = AverageMeter()
     union_meter = AverageMeter()
-    for batch_i, (x, y) in enumerate(tqdm(val_dataloader)):
+    for batch_i, (x, y) in enumerate(val_dataloader):
         with torch.no_grad():
-            pred_mask = model(x.to(device))
+            # pred_mask = model(x.to(device))
+            stuff_pred_mask,thing_pred_mask = model(x.to(device))
+        # pred_mask = stuff_pred_mask+thing_pred_mask
+        back_pred_mask = (stuff_pred_mask[:,0,:,:]+thing_pred_mask[:,0,:,:])/2
+        back_pred_mask = back_pred_mask.unsqueeze(dim=1)
+        stuff_pred_mask = stuff_pred_mask[:,8:,:,:]
+        thing_pred_mask = thing_pred_mask[:,1:8,:,:]
+        # print(back_pred_mask.shape,thing_pred_mask.shape,stuff_pred_mask.shape)
+
+        pred_mask = torch.cat((back_pred_mask,thing_pred_mask,stuff_pred_mask),dim=1)
         pred_mask = torch.softmax(pred_mask, dim=1)
-        y_pred = torch.argmax(pred_mask, dim=1)
-        intersection, union, target = intersectionAndUnionGPU(y_pred, y.to(device), 12)
+        pred = torch.argmax(pred_mask, dim=1)
+        intersection, union, target = intersectionAndUnionGPU(pred, y.to(device), 12)
         intersection_meter.update(intersection)
         union_meter.update(union)
 
     iou_class = intersection_meter.sum / (union_meter.sum + 1e-10)
-    np.save(logger.path_join('iou_mat.npy'), iou_class.cpu().numpy())
-
     mIoU = torch.mean(iou_class)
-    print(f"mIoU: {mIoU}")
-    msg = ', '.join(['{:.4f}'.format(t) for t in iou_class])
-    print(msg)
+    print(mIoU)
+    for i,iou in enumerate(iou_class):
+        print('{}:{}'.format(i,iou))

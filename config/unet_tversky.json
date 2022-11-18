@@ -4,7 +4,7 @@
     "batch": 8,
     "lr": 1e-3,
     "loss": "tversky",
-    "alpha": 0.5,
-    "beta": 0.5,
+    "alpha": 0.8,
+    "beta": 0.2,
     "gamma": 1.0
 }
