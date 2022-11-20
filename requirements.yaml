@@ -171,8 +171,11 @@ dependencies:
     - kiwisolver==1.4.4
     - matplotlib==3.6.2
     - munch==2.5.0
+    - pandas==1.5.1
     - pretrainedmodels==0.7.4
+    - pytz==2022.6
     - pyyaml==6.0
+    - seaborn==0.12.1
     - segmentation-models-pytorch==0.3.0
     - timm==0.4.12
     - tqdm==4.64.1
